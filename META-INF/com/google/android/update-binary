@@ -27,9 +27,9 @@ PartitionFilePath=/dev/block/bootdevice/by-name
 flash_partition() {
     local partition="$1"
     local suffix=""
-    if [ "$dev_arb" = "1" ]; then
+    if [ "$dev_arb" = "0" ]; then
         case "$partition" in
-            abl|xbl|xbl_config|xbl_ramdump) suffix="501_" ;;
+            abl|xbl|xbl_config|xbl_ramdump) suffix="400_" ;;
         esac
     fi
     ui_print "flashing $partition ..."
@@ -46,8 +46,7 @@ fi
 
 ui_print "---flashing $ZIPNAME   "
 ui_print "---author: coolapk@GQJZJY   "
-ui_print "---firmware version：CPH2723_16.0.211   "
-
+ui_print "---firmware version：CPH2723_16.3.501   "
 
 ui_print "Reading device ARB anti-rollback level..."
 for slot in a b; do
@@ -55,18 +54,17 @@ for slot in a b; do
     eval "dev_arb_${slot}=\$(arbscan /tmp/xbl_config_${slot}.img 2>/dev/null | grep 'ARB Index' | awk '{print \$4}')"
 done
 
-if [ "$dev_arb_a" = "1" ] || [ "$dev_arb_b" = "1" ]; then
-    dev_arb=1
-    ui_print "WARNING！！！"
-    ui_print "ARB=1 will flash the anti-rollback components (abl, xbl, xbl_config, xbl_randomdump) from CPH2723_16.3.501"
-
-else
+if [ "$dev_arb_a" = "0" ] && [ "$dev_arb_b" = "0" ]; then
     dev_arb=0
+    ui_print "WARNING！！！"
+    ui_print "ARB=0 will flash the anti-rollback components (abl, xbl, xbl_config, xbl_ramdump) from CPH2723_16.2.400"
+else
+    dev_arb=1
 fi
 
-ui_print"   "
+ui_print "   "
 ui_print "Device ARB Index: $dev_arb"
-ui_print"   "
+ui_print "   "
 ui_print "Start flashing..."
 
 AB_PARTITIONS="abl xbl xbl_config xbl_ramdump aop aop_config bluetooth cpucp cpucp_dtb devcfg dsp engineering_cdt featenabler hyp imagefv keymaster modem oplus_sec pdp pdp_cdb pvmfw qupfw shrm soccp_dcd soccp_debug splash spuservice tz uefi uefisecapp"
