@@ -1,0 +1,89 @@
+#!/sbin/sh
+OUTFD=/proc/self/fd/$2
+ZIPFILE="$3"
+ZIPNAME=${ZIPFILE##*/}
+
+[ -d /tmp ] && rm -rf /tmp
+mkdir -p /tmp
+
+unzip "$ZIPFILE" META-INF/* -d /tmp
+export PATH=/tmp/META-INF:$PATH
+chmod -R 0755 /tmp/META-INF
+
+ui_print(){
+    echo -e "ui_print $1\nui_print" > $OUTFD
+}
+
+package_extract_file() {
+    unzip -p "$ZIPFILE" "$1" > "$2"
+}
+
+package_extract_zstd() {
+    unzip -p "$ZIPFILE" "$1" | zstd -c -d > "$2"
+}
+
+PartitionFilePath=/dev/block/bootdevice/by-name
+
+flash_partition() {
+    local partition="$1"
+    local suffix=""
+    if [ "$dev_arb" = "1" ]; then
+        case "$partition" in
+            abl|xbl|xbl_config|xbl_ramdump) suffix="501_" ;;
+        esac
+    fi
+    ui_print "flashing $partition ..."
+    package_extract_file "images/${suffix}${partition}.img" "${PartitionFilePath}/${partition}_a"
+    package_extract_file "images/${suffix}${partition}.img" "${PartitionFilePath}/${partition}_b"
+}
+
+DEVICE=$(getprop ro.product.device)
+if [ "$DEVICE" != "OP60F5L1" ] && [ "$DEVICE" != "OP612FBL1" ]; then
+    ui_print "error: Your device is not Oneplus 13T/s"
+    ui_print "Your device：$DEVICE"
+    exit 1
+fi
+
+ui_print "---flashing $ZIPNAME   "
+ui_print "---author: coolapk@GQJZJY   "
+ui_print "---firmware version：CPH2723_16.0.211   "
+
+
+ui_print "Reading device ARB anti-rollback level..."
+for slot in a b; do
+    dd if="${PartitionFilePath}/xbl_config_${slot}" of="/tmp/xbl_config_${slot}.img"
+    eval "dev_arb_${slot}=\$(arbscan /tmp/xbl_config_${slot}.img 2>/dev/null | grep 'ARB Index' | awk '{print \$4}')"
+done
+
+if [ "$dev_arb_a" = "1" ] || [ "$dev_arb_b" = "1" ]; then
+    dev_arb=1
+    ui_print "WARNING！！！"
+    ui_print "ARB=1 will flash the anti-rollback components (abl, xbl, xbl_config, xbl_randomdump) from CPH2723_16.3.501"
+
+else
+    dev_arb=0
+fi
+
+ui_print"   "
+ui_print "Device ARB Index: $dev_arb"
+ui_print"   "
+ui_print "Start flashing..."
+
+AB_PARTITIONS="abl xbl xbl_config xbl_ramdump aop aop_config bluetooth cpucp cpucp_dtb devcfg dsp engineering_cdt featenabler hyp imagefv keymaster modem oplus_sec pdp pdp_cdb pvmfw qupfw shrm soccp_dcd soccp_debug splash spuservice tz uefi uefisecapp"
+
+for partition in $AB_PARTITIONS; do
+    flash_partition "$partition"
+done
+
+ui_print "flashing oplusstanvbk ..."
+if [ "$DEVICE" = "OP60F5L1" ]; then
+    package_extract_file "images/oplusstanvbk_CN.img" "${PartitionFilePath}/oplusstanvbk_a"
+    package_extract_file "images/oplusstanvbk_CN.img" "${PartitionFilePath}/oplusstanvbk_b"
+else
+    package_extract_file "images/oplusstanvbk_IN.img" "${PartitionFilePath}/oplusstanvbk_a"
+    package_extract_file "images/oplusstanvbk_IN.img" "${PartitionFilePath}/oplusstanvbk_b"
+fi
+
+ui_print "flash done！"
+rm -rf /tmp/*
+exit 0
